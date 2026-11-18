@@ -37,7 +37,8 @@ workflows:
             -derivedDataPath build/derived \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO > build.log 2>&1 || true
+            CODE_SIGNING_ALLOWED=NO \
+            OTHER_SWIFT_FLAGS="-Xfrontend -solver-expression-time-threshold=300 -Xfrontend -solver-memory-threshold=2000000000" > build.log 2>&1 || true
 
           grep -E "error:|BUILD SUCCEEDED|BUILD FAILED" -C 2 build.log
 
