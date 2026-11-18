@@ -1,60 +1,41 @@
 workflows:
-  ios-native-quick-start:
-    name: iOS Native
-    max_build_duration: 120
+  ios-unsigned-sideloadly:
+    name: iOS Unsigned IPA
+    max_build_duration: 60
     instance_type: mac_mini_m2
-    integrations:
-      app_store_connect: codemagic
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: io.codemagic.cmswiftly
       vars:
-        BUNDLE_ID: "io.codemagic.cmswiftly"
+        # Укажите имя вашего .xcworkspace (если используете CocoaPods) или .xcodeproj
         XCODE_WORKSPACE: "swiftly.xcworkspace"
         XCODE_SCHEME: "swiftly"
-        APP_STORE_APPLE_ID: 1555555551
-      xcode: latest # <-- set to specific version e.g. 14.3, 15.0 to avoid unexpected updates.
+      xcode: latest
       cocoapods: default
     scripts:
       - name: Install CocoaPods dependencies
         script: |
-          pod install
-      - name: Set up provisioning profiles settings on Xcode project
-        script: xcode-project use-profiles
-      - name: Increment build number
+          if [ -f "Podfile" ]; then
+            pod install
+          fi
+
+      - name: Build unsigned .app
         script: |
-          cd $CM_BUILD_DIR
-          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID")
-          agvtool new-version -all $(($LATEST_BUILD_NUMBER + 1))
-      - name: Build ipa for distribution
+          # Если у вас нет CocoaPods, замените -workspace "$XCODE_WORKSPACE" на -project "ВашеИмя.xcodeproj"
+          xcodebuild build \
+            -workspace "$XCODE_WORKSPACE" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build/derived \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Package .app into .ipa
         script: |
-          xcode-project build-ipa \
-            --workspace "$XCODE_WORKSPACE" \
-            --scheme "$XCODE_SCHEME"
+          mkdir -p build/ipa/Payload
+          cp -r build/derived/Build/Products/Release-iphoneos/*.app build/ipa/Payload/
+          cd build/ipa
+          zip -r unsigned_app.ipa Payload
+
     artifacts:
-      - build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log
-      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
-      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
-    publishing:
-      email:
-        recipients:
-          - user_1@example.com
-          - user_2@example.com
-        notify:
-          success: true
-          failure: false
-      app_store_connect:
-        auth: integration
-
-        # Configuration related to TestFlight (optional)
-        # Note: This action is performed during post-processing.
-        submit_to_testflight: true
-        beta_groups: # Specify the names of beta tester groups that will get access to the build once it has passed beta review.
-          - group name 1
-          - group name 2
-
-        # Configuration related to App Store (optional)
-        # Note: This action is performed during post-processing.
-        submit_to_app_store: false
+      - build/ipa/*.ipa
