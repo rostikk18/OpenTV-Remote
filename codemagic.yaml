@@ -4,10 +4,6 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m2
     environment:
-      vars:
-        # Укажите имя вашего .xcworkspace (если используете CocoaPods) или .xcodeproj
-        XCODE_WORKSPACE: "swiftly.xcworkspace"
-        XCODE_SCHEME: "swiftly"
       xcode: latest
       cocoapods: default
     scripts:
@@ -19,16 +15,41 @@ workflows:
 
       - name: Build unsigned .app
         script: |
-          # Если у вас нет CocoaPods, замените -workspace "$XCODE_WORKSPACE" на -project "ВашеИмя.xcodeproj"
-          xcodebuild build \
-            -workspace "$XCODE_WORKSPACE" \
-            -scheme "$XCODE_SCHEME" \
-            -configuration Release \
-            -sdk iphoneos \
-            -derivedDataPath build/derived \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+          # Автоматически ищем .xcworkspace или .xcodeproj
+          WORKSPACE=$(find . -maxdepth 2 -name "*.xcworkspace" ! -path "*/*.xcodeproj/*" | head -n 1)
+          PROJECT=$(find . -maxdepth 2 -name "*.xcodeproj" | head -n 1)
+
+          if [ -n "$WORKSPACE" ]; then
+            echo "Найден workspace: $WORKSPACE"
+            SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" | awk '/Schemes:/{getline; print $1; exit}')
+            echo "Используется схема: $SCHEME"
+            xcodebuild build \
+              -workspace "$WORKSPACE" \
+              -scheme "$SCHEME" \
+              -configuration Release \
+              -sdk iphoneos \
+              -derivedDataPath build/derived \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO
+          elif [ -n "$PROJECT" ]; then
+            echo "Найден project: $PROJECT"
+            SCHEME=$(xcodebuild -list -project "$PROJECT" | awk '/Schemes:/{getline; print $1; exit}')
+            echo "Используется схема: $SCHEME"
+            xcodebuild build \
+              -project "$PROJECT" \
+              -scheme "$SCHEME" \
+              -configuration Release \
+              -sdk iphoneos \
+              -derivedDataPath build/derived \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO
+          else
+            echo "Ошибка: файлы .xcworkspace или .xcodeproj не найдены!"
+            ls -la
+            exit 1
+          fi
 
       - name: Package .app into .ipa
         script: |
