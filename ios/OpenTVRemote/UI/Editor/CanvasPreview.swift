@@ -50,10 +50,11 @@ struct CanvasPreview: View {
           context.fill(outline, with: .color(raised))
           context.stroke(outline, with: .color(muted.opacity(0.6)), lineWidth: unit * 0.04)
           circle(accent, radius * 0.34, center)
-          for offset in [
+          let offsets: [CGPoint] = [
             CGPoint(x: 0, y: -0.7), CGPoint(x: 0, y: 0.7),
             CGPoint(x: -0.7, y: 0), CGPoint(x: 0.7, y: 0),
-          ] {
+          ]
+          for offset in offsets {
             circle(
               muted, unit * 0.10,
               CGPoint(
@@ -87,15 +88,17 @@ struct CanvasPreview: View {
           }
         case .volume, .channels:
           rounded(raised, rect, unit * 0.4)
+          let ys: [CGFloat] = [0.24, 0.76]
           if item.kind == .volume {
-            for y in [0.24, 0.76] {
+            let speakerPts: [CGPoint] = [
+              CGPoint(x: -0.20, y: -0.10), CGPoint(x: -0.10, y: -0.10),
+              CGPoint(x: 0.05, y: -0.24), CGPoint(x: 0.05, y: 0.24),
+              CGPoint(x: -0.10, y: 0.10), CGPoint(x: -0.20, y: 0.10),
+            ]
+            for y in ys {
               let speaker = CGPoint(x: top.x + box.width * 0.42, y: top.y + box.height * y)
               var path = Path()
-              for (index, point) in [
-                CGPoint(x: -0.20, y: -0.10), CGPoint(x: -0.10, y: -0.10),
-                CGPoint(x: 0.05, y: -0.24), CGPoint(x: 0.05, y: 0.24),
-                CGPoint(x: -0.10, y: 0.10), CGPoint(x: -0.20, y: 0.10),
-              ].enumerated() {
+              for (index, point) in speakerPts.enumerated() {
                 let target = CGPoint(x: speaker.x + unit * point.x, y: speaker.y + unit * point.y)
                 if index == 0 { path.move(to: target) } else { path.addLine(to: target) }
               }
@@ -103,7 +106,7 @@ struct CanvasPreview: View {
               context.fill(path, with: .color(accent))
               var arc = Path()
               for step in 0...20 {
-                let angle = (-55 + 110 * Double(step) / 20) * .pi / 180
+                let angle = (-55.0 + 110.0 * Double(step) / 20.0) * .pi / 180.0
                 let point = CGPoint(
                   x: speaker.x + unit * (0.16 + 0.20 * cos(angle)),
                   y: speaker.y + unit * 0.20 * sin(angle))
@@ -112,7 +115,7 @@ struct CanvasPreview: View {
               context.stroke(arc, with: .color(accent), lineWidth: unit * 0.06)
             }
           } else {
-            for y in [0.24, 0.76] {
+            for y in ys {
               line(
                 CGPoint(x: top.x + box.width * 0.3, y: top.y + box.height * y),
                 CGPoint(x: top.x + box.width * 0.7, y: top.y + box.height * y), unit * 0.08)
@@ -149,6 +152,7 @@ struct CanvasPreview: View {
     }.accessibilityHidden(true)
   }
 }
+
 struct EditorItemPreview: View {
   let item: CanvasItem
   var app: AppShortcut? = nil
@@ -185,6 +189,7 @@ struct EditorItemPreview: View {
     }.foregroundStyle(Color(rgb: p.text))
   }
 }
+
 private struct PadIllustration: View {
   @Environment(\.remotePalette) private var p
   var body: some View {
@@ -195,18 +200,21 @@ private struct PadIllustration: View {
           RadialGradient(
             colors: [Color(rgb: p.raised), Color(rgb: p.surface)], center: .center, startRadius: 0,
             endRadius: side / 2)
-        ).overlay(Circle().stroke(Color(rgb: p.outline), lineWidth: side > 100 ? 1 : 0.5))
-        Image(systemName: "chevron.up").offset(y: -side * 0.35)
-        Image(systemName: "chevron.down").offset(y: side * 0.35)
-        Image(systemName: "chevron.left").offset(x: -side * 0.35)
-        Image(systemName: "chevron.right").offset(x: side * 0.35)
-        Circle().fill(Color(rgb: p.accent)).frame(width: side * 0.36, height: side * 0.36).overlay(
-          Text("OK").font(.system(size: max(5, side * 0.13), weight: .bold)).foregroundStyle(
-            Color(rgb: p.background)))
-      }.font(.system(size: max(5, side * 0.09), weight: .semibold)).foregroundStyle(
-        Color(rgb: p.text)
-      ).frame(width: side, height: side).position(
+        ).overlay(Circle().stroke(Color(rgb: p.outline).opacity(0.45), lineWidth: 1))
+        ForEach(
+          [
+            ("chevron.up", 0.0, -side * 0.34),
+            ("chevron.down", 0.0, side * 0.34),
+            ("chevron.left", -side * 0.34, 0.0),
+            ("chevron.right", side * 0.34, 0.0),
+          ], id: \.0
+        ) { symbol, dx, dy in
+          Image(systemName: symbol).font(.caption.weight(.bold)).foregroundStyle(Color(rgb: p.muted))
+            .offset(x: dx, y: dy)
+        }
+        Circle().fill(Color(rgb: p.accent)).frame(width: side * 0.32, height: side * 0.32)
+      }.frame(width: side, height: side).position(
         x: geometry.size.width / 2, y: geometry.size.height / 2)
-    }
+    }.accessibilityHidden(true)
   }
 }
