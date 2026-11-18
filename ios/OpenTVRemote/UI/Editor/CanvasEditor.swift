@@ -177,7 +177,7 @@ private struct EditorDragBoard: View {
                 } label: {
                   RoundedRectangle(cornerRadius: 10).stroke(
                     Color(rgb: p.outline).opacity(0.18),
-                    style: StrokeStyle(lineWidth: 1, dash:)
+                    style: StrokeStyle(lineWidth: 1, dash: [3,4])
                   ).frame(width: cell, height: row)
                 }.offset(x: CGFloat(x) * (cell + gap), y: CGFloat(y) * (row + gap))
                   .accessibilityLabel(L10n.format("Grid column %ld, row %ld", x + 1, y + 1))
