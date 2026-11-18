@@ -4,7 +4,7 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m2
     environment:
-      xcode: latest
+      xcode: 16.2
       cocoapods: default
     scripts:
       - name: Install CocoaPods dependencies
@@ -15,7 +15,6 @@ workflows:
 
       - name: Build unsigned .app
         script: |
-          # Автоматически ищем .xcworkspace или .xcodeproj
           WORKSPACE=$(find . -maxdepth 2 -name "*.xcworkspace" ! -path "*/*.xcodeproj/*" | head -n 1)
           PROJECT=$(find . -maxdepth 2 -name "*.xcodeproj" | head -n 1)
 
@@ -31,7 +30,8 @@ workflows:
               -derivedDataPath build/derived \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGNING_ALLOWED=NO
+              CODE_SIGNING_ALLOWED=NO \
+              OTHER_SWIFT_FLAGS="-Xfrontend -solver-expression-time-threshold=120 -Xfrontend -solver-memory-threshold=1000000000"
           elif [ -n "$PROJECT" ]; then
             echo "Найден project: $PROJECT"
             SCHEME=$(xcodebuild -list -project "$PROJECT" | awk '/Schemes:/{getline; print $1; exit}')
@@ -44,7 +44,8 @@ workflows:
               -derivedDataPath build/derived \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGNING_ALLOWED=NO
+              CODE_SIGNING_ALLOWED=NO \
+              OTHER_SWIFT_FLAGS="-Xfrontend -solver-expression-time-threshold=120 -Xfrontend -solver-memory-threshold=1000000000"
           else
             echo "Ошибка: файлы .xcworkspace или .xcodeproj не найдены!"
             ls -la
