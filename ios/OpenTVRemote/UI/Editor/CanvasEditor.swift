@@ -136,7 +136,6 @@ struct CanvasEditor: View {
     profile.canvas = next
   }
 }
-
 private struct BoardTopKey: PreferenceKey {
   static var defaultValue: CGFloat = 0
   static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
@@ -178,7 +177,7 @@ private struct EditorDragBoard: View {
                 } label: {
                   RoundedRectangle(cornerRadius: 10).stroke(
                     Color(rgb: p.outline).opacity(0.18),
-                    style: StrokeStyle(lineWidth: 1, dash: [3, 4])
+                    style: StrokeStyle(lineWidth: 1, dash:)
                   ).frame(width: cell, height: row)
                 }.offset(x: CGFloat(x) * (cell + gap), y: CGFloat(y) * (row + gap))
                   .accessibilityLabel(L10n.format("Grid column %ld, row %ld", x + 1, y + 1))
@@ -207,106 +206,9 @@ private struct EditorDragBoard: View {
             }
             // Stable source items keep the recognizer attached while neighbors preview new positions.
             ForEach(canvas.items) { original in
-              let visual = shown.items.first { $0.id == original.id } ?? original
-              let floating = activeID == original.id && moving
-              let origin = floating ? original : visual
-              EditorItemPreview(item: visual, app: apps.first { $0.target == original.app })
-                .frame(
-                  width: CGFloat(visual.w) * (cell + gap) - gap,
-                  height: CGFloat(visual.h) * (row + gap) - gap
-                )
-                .background(
-                  Color(rgb: p.background).opacity(floating ? 0.9 : 0),
-                  in: RoundedRectangle(cornerRadius: 22)
-                )
-                .overlay(
-                  RoundedRectangle(cornerRadius: 22).stroke(
-                    original.id == selected ? Color(rgb: invalid ? 0xFFB4AB : p.accent) : .clear,
-                    lineWidth: 2)
-                )
-                .overlay(alignment: .bottomTrailing) {
-                  if original.id == selected && resizing {
-                    Image(systemName: "arrow.down.right").font(.headline).foregroundStyle(
-                      Color(rgb: p.background)
-                    ).frame(width: 40, height: 40).background(Color(rgb: p.accent), in: Circle())
-                      .offset(x: 3, y: 3)
-                      .highPriorityGesture(
-                        DragGesture(minimumDistance: 1, coordinateSpace: .named("editor-board"))
-                          .updating($contact) { _, state, _ in state = true }
-                          .onChanged { value in
-                            updateResize(
-                              original, value.translation, cell: cell, row: row, gap: gap)
-                          }
-                          .onEnded { value in
-                            updateResize(
-                              original, value.translation, cell: cell, row: row, gap: gap)
-                            finish()
-                          }
-                      )
-                      .accessibilityLabel(
-                        L10n.format("Resize %@", original.command?.title ?? original.kind.title))
-                  }
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
-                  guard base == nil else { return }
-                  selected = original.id
-                  resizing = false
-                }
-                .highPriorityGesture(
-                  DragGesture(minimumDistance: 4, coordinateSpace: .named("editor-board"))
-                    .updating($contact) { _, state, _ in state = true }
-                    .onChanged { value in
-                      updateMove(original, value.translation, cell: cell, row: row, gap: gap)
-                      if let destination, value.location.y + boardTop > geometry.size.height - 48,
-                        destination.y + destination.h >= rows - 2,
-                        Date().timeIntervalSince(lastScroll) > 0.2
-                      {
-                        lastScroll = Date()
-                        withAnimation(.easeOut(duration: 0.15)) {
-                          scroll.scrollTo("editor-bottom", anchor: .bottom)
-                        }
-                      }
-                    }
-                    .onEnded { value in
-                      updateMove(original, value.translation, cell: cell, row: row, gap: gap)
-                      finish()
-                    },
-                  including: resizing && selected == original.id ? .subviews : .all
-                )
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(
-                  L10n.format(
-                    "%@, column %ld, row %ld",
-                    apps.first { $0.target == original.app }?.name ?? original.command?.title
-                      ?? original.kind.title, visual.x + 1, visual.y + 1)
-                )
-                .accessibilityAddTraits(.isButton)
-                .accessibilityAction {
-                  selected = original.id
-                  resizing = false
-                }
-                .accessibilityAction(named: L10n.text("Move down")) {
-                  moveAccessible(original, dx: 0, dy: 1)
-                }
-                .accessibilityAction(named: L10n.text("Move up")) {
-                  moveAccessible(original, dx: 0, dy: -1)
-                }
-                .accessibilityAction(named: L10n.text("Move left")) {
-                  moveAccessible(original, dx: -1, dy: 0)
-                }
-                .accessibilityAction(named: L10n.text("Move right")) {
-                  moveAccessible(original, dx: 1, dy: 0)
-                }
-                .offset(
-                  x: CGFloat(origin.x) * (cell + gap) + (floating ? translation.width : 0),
-                  y: CGFloat(origin.y) * (row + gap) + (floating ? translation.height : 0)
-                )
-                .shadow(
-                  color: .black.opacity(floating ? 0.24 : 0), radius: floating ? 12 : 0,
-                  y: floating ? 6 : 0
-                )
-                .zIndex(floating ? 2 : 1)
+              boardItemView(
+                original: original, cell: cell, row: row, gap: gap, rows: rows,
+                geometry: geometry, scroll: scroll)
             }
           }.frame(
             width: geometry.size.width - 32, height: CGFloat(rows) * (row + gap),
@@ -329,6 +231,117 @@ private struct EditorDragBoard: View {
     .onChange(of: contact) { _, active in if !active && base != nil { clear() } }
     .onChange(of: phase) { _, value in if value != .active { clear() } }
     .onDisappear { clear() }
+  }
+  @ViewBuilder
+  private func boardItemView(
+    original: CanvasItem,
+    cell: CGFloat,
+    row: CGFloat,
+    gap: CGFloat,
+    rows: Int,
+    geometry: GeometryProxy,
+    scroll: ScrollViewProxy
+  ) -> some View {
+    let visual = shown.items.first { $0.id == original.id } ?? original
+    let floating = activeID == original.id && moving
+    let origin = floating ? original : visual
+    let matchedApp = apps.first { $0.target == original.app }
+    let itemTitle = matchedApp?.name ?? original.command?.title ?? original.kind.title
+
+    EditorItemPreview(item: visual, app: matchedApp)
+      .frame(
+        width: CGFloat(visual.w) * (cell + gap) - gap,
+        height: CGFloat(visual.h) * (row + gap) - gap
+      )
+      .background(
+        Color(rgb: p.background).opacity(floating ? 0.9 : 0),
+        in: RoundedRectangle(cornerRadius: 22)
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: 22).stroke(
+          original.id == selected ? Color(rgb: invalid ? 0xFFB4AB : p.accent) : .clear,
+          lineWidth: 2)
+      )
+      .overlay(alignment: .bottomTrailing) {
+        if original.id == selected && resizing {
+          Image(systemName: "arrow.down.right").font(.headline).foregroundStyle(
+            Color(rgb: p.background)
+          ).frame(width: 40, height: 40).background(Color(rgb: p.accent), in: Circle())
+            .offset(x: 3, y: 3)
+            .highPriorityGesture(
+              DragGesture(minimumDistance: 1, coordinateSpace: .named("editor-board"))
+                .updating($contact) { _, state, _ in state = true }
+                .onChanged { value in
+                  updateResize(
+                    original, value.translation, cell: cell, row: row, gap: gap)
+                }
+                .onEnded { value in
+                  updateResize(
+                    original, value.translation, cell: cell, row: row, gap: gap)
+                  finish()
+                }
+            )
+            .accessibilityLabel(
+              L10n.format("Resize %@", original.command?.title ?? original.kind.title))
+        }
+      }
+      .contentShape(Rectangle())
+      .onTapGesture {
+        guard base == nil else { return }
+        selected = original.id
+        resizing = false
+      }
+      .highPriorityGesture(
+        DragGesture(minimumDistance: 4, coordinateSpace: .named("editor-board"))
+          .updating($contact) { _, state, _ in state = true }
+          .onChanged { value in
+            updateMove(original, value.translation, cell: cell, row: row, gap: gap)
+            if let destination, value.location.y + boardTop > geometry.size.height - 48,
+              destination.y + destination.h >= rows - 2,
+              Date().timeIntervalSince(lastScroll) > 0.2
+            {
+              lastScroll = Date()
+              withAnimation(.easeOut(duration: 0.15)) {
+                scroll.scrollTo("editor-bottom", anchor: .bottom)
+              }
+            }
+          }
+          .onEnded { value in
+            updateMove(original, value.translation, cell: cell, row: row, gap: gap)
+            finish()
+          },
+        including: resizing && selected == original.id ? .subviews : .all
+      )
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(
+        L10n.format("%@, column %ld, row %ld", itemTitle, visual.x + 1, visual.y + 1)
+      )
+      .accessibilityAddTraits(.isButton)
+      .accessibilityAction {
+        selected = original.id
+        resizing = false
+      }
+      .accessibilityAction(named: L10n.text("Move down")) {
+        moveAccessible(original, dx: 0, dy: 1)
+      }
+      .accessibilityAction(named: L10n.text("Move up")) {
+        moveAccessible(original, dx: 0, dy: -1)
+      }
+      .accessibilityAction(named: L10n.text("Move left")) {
+        moveAccessible(original, dx: -1, dy: 0)
+      }
+      .accessibilityAction(named: L10n.text("Move right")) {
+        moveAccessible(original, dx: 1, dy: 0)
+      }
+      .offset(
+        x: CGFloat(origin.x) * (cell + gap) + (floating ? translation.width : 0),
+        y: CGFloat(origin.y) * (row + gap) + (floating ? translation.height : 0)
+      )
+      .shadow(
+        color: .black.opacity(floating ? 0.24 : 0), radius: floating ? 12 : 0,
+        y: floating ? 6 : 0
+      )
+      .zIndex(floating ? 2 : 1)
   }
   private func begin(_ item: CanvasItem, moving: Bool) {
     if base == nil {
